@@ -1,0 +1,70 @@
+import ccxt
+import time
+import threading
+import requests
+
+# Initialize the exchange (Binance in this example)
+exchange = ccxt.binance()
+
+def get_price(pair):
+    """Fetch the latest price for a given pair from the exchange."""
+    ticker = exchange.fetch_ticker(pair)
+    return ticker['last']
+
+def find_arbitrage_opportunities(pairs):
+    """Find and return the best arbitrage opportunity among the given pairs."""
+    best_opportunity = None
+    best_profit = 0
+
+    for i in range(len(pairs)):
+        for j in range(len(pairs)):
+            for k in range(len(pairs)):
+                if i != j and j != k and i != k:
+                    pair1 = pairs[i]
+                    pair2 = pairs[j]
+                    pair3 = pairs[k]
+
+                    price1 = get_price(pair1)
+                    price2 = get_price(pair2)
+                    price3 = get_price(pair3)
+
+                    # Calculate the potential profit
+                    profit = price1 * price2 * price3
+
+                    if profit > best_profit:
+                        best_profit = profit
+                        best_opportunity = (pair1, pair2, pair3)
+
+    return best_opportunity, best_profit
+
+def send_arbitrage_to_webpage(opportunity, profit):
+    """Send the arbitrage opportunity to an external webpage via POST request."""
+    url = 'https://example.com/arbitrage'
+    data = {
+        'opportunity': opportunity,
+        'profit': profit
+    }
+    response = requests.post(url, json=data)
+
+    if response.status_code == 200:
+        print(f"Successfully sent arbitrage opportunity to {url}")
+    else:
+        print(f"Failed to send arbitrage opportunity to {url}. Status code: {response.status_code}")
+
+def analyze_arbitrage():
+    """Continuously analyze for arbitrage opportunities every 2 minutes."""
+    pairs = ['BTC/USDT', 'ETH/BTC', 'ETH/USDT']
+
+    while True:
+        best_opportunity, best_profit = find_arbitrage_opportunities(pairs)
+        if best_opportunity:
+            print(f"Best Arbitrage Opportunity: {best_opportunity} with profit: {best_profit}")
+            send_arbitrage_to_webpage(best_opportunity, best_profit)
+        else:
+            print("No arbitrage opportunity found.")
+        
+        # Wait for 2 minutes before the next analysis
+        time.sleep(120)
+
+# Run the arbitrage analysis in a separate thread
+threading.Thread(target=analyze_arbitrage).start()
