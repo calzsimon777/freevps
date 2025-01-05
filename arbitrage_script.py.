@@ -2,17 +2,65 @@ import ccxt
 import time
 import threading
 import requests
+from dotenv import load_dotenv
+import os
 
-# Initialize the exchange (Binance in this example)
-exchange = ccxt.binance()
+# Load API keys securely from the .env file
+load_dotenv()
+BINANCE_API_KEY = os.getenv('BINANCE_API_KEY')
+BINANCE_SECRET_KEY = os.getenv('BINANCE_SECRET_KEY')
+
+# Initialize the exchange (Binance)
+exchange = ccxt.binance({
+    'apiKey': BINANCE_API_KEY,
+    'secret': BINANCE_SECRET_KEY,
+    'enableRateLimit': True
+})
+
+# Fetch market data and generate pairs
+def get_market_data():
+    """Fetch available pairs dynamically from the exchange."""
+    try:
+        markets = exchange.load_markets()
+        return list(markets.keys())
+    except Exception as e:
+        print(f"Error fetching market data: {e}")
+        return []
 
 def get_price(pair):
     """Fetch the latest price for a given pair from the exchange."""
-    ticker = exchange.fetch_ticker(pair)
-    return ticker['last']
+    try:
+        ticker = exchange.fetch_ticker(pair)
+        return ticker['bid'], ticker['ask']  # Return bid and ask prices
+    except Exception as e:
+        print(f"Error fetching price for {pair}: {e}")
+        return None, None
+
+def calculate_arbitrage(pair1, pair2, pair3):
+    """
+    Calculate triangular arbitrage for three pairs.
+    Example: BTC/USDT -> ETH/BTC -> ETH/USDT
+    """
+    bid1, ask1 = get_price(pair1)
+    bid2, ask2 = get_price(pair2)
+    bid3, ask3 = get_price(pair3)
+
+    if None in (bid1, ask1, bid2, ask2, bid3, ask3):
+        return None, 0  # Skip if any price is unavailable
+
+    # Assume starting with 1 unit of the base currency in pair1
+    start_amount = 1
+
+    # Calculate the final amount after the triangular trade
+    intermediate_amount1 = start_amount / ask1  # Buy pair1
+    intermediate_amount2 = intermediate_amount1 * bid2  # Sell pair2
+    final_amount = intermediate_amount2 * bid3  # Sell pair3
+
+    profit = final_amount - start_amount  # Net profit in base currency
+    return (pair1, pair2, pair3), profit
 
 def find_arbitrage_opportunities(pairs):
-    """Find and return the best arbitrage opportunity among the given pairs."""
+    """Find and return the best arbitrage opportunity."""
     best_opportunity = None
     best_profit = 0
 
@@ -24,41 +72,44 @@ def find_arbitrage_opportunities(pairs):
                     pair2 = pairs[j]
                     pair3 = pairs[k]
 
-                    price1 = get_price(pair1)
-                    price2 = get_price(pair2)
-                    price3 = get_price(pair3)
-
-                    # Calculate the potential profit
-                    profit = price1 * price2 * price3
-
+                    opportunity, profit = calculate_arbitrage(pair1, pair2, pair3)
                     if profit > best_profit:
                         best_profit = profit
-                        best_opportunity = (pair1, pair2, pair3)
+                        best_opportunity = opportunity
 
     return best_opportunity, best_profit
 
 def send_arbitrage_to_webpage(opportunity, profit):
     """Send the arbitrage opportunity to an external webpage via POST request."""
-    url = 'https://example.com/arbitrage'
+    url = 'https://example.com/arbitrage'  # Replace with your actual URL
     data = {
         'opportunity': opportunity,
         'profit': profit
     }
-    response = requests.post(url, json=data)
-
-    if response.status_code == 200:
-        print(f"Successfully sent arbitrage opportunity to {url}")
-    else:
-        print(f"Failed to send arbitrage opportunity to {url}. Status code: {response.status_code}")
+    try:
+        response = requests.post(url, json=data)
+        if response.status_code == 200:
+            print(f"Successfully sent arbitrage opportunity to {url}")
+        else:
+            print(f"Failed to send arbitrage opportunity to {url}. Status code: {response.status_code}")
+    except Exception as e:
+        print(f"Error sending data to webpage: {e}")
 
 def analyze_arbitrage():
     """Continuously analyze for arbitrage opportunities every 2 minutes."""
-    pairs = ['BTC/USDT', 'ETH/BTC', 'ETH/USDT']
+    print("Fetching market data...")
+    pairs = get_market_data()
+
+    if not pairs:
+        print("No pairs available for analysis. Exiting.")
+        return
+
+    print(f"Analyzing {len(pairs)} pairs for arbitrage opportunities...")
 
     while True:
         best_opportunity, best_profit = find_arbitrage_opportunities(pairs)
         if best_opportunity:
-            print(f"Best Arbitrage Opportunity: {best_opportunity} with profit: {best_profit}")
+            print(f"Best Arbitrage Opportunity: {best_opportunity} with profit: {best_profit:.6f}")
             send_arbitrage_to_webpage(best_opportunity, best_profit)
         else:
             print("No arbitrage opportunity found.")
